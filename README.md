@@ -17,13 +17,21 @@ Para garantir o bom funcionamento do ambiente de desenvolvimento, recomenda-se i
     pip install -r requirements.txt
 ```
 
-## 1. Análise exploratória de dados
+## Extração dos dados
+
+A criação da camada raw é feita a partir da extração dos dados que serão utilizados na análise. 
+
+```bash
+    python src/data/extraction_data.py
+```
+
+## Análise exploratória de dados
 --------------------------------
 A análise exploratória está documentada em [01-eda_raw.ipynb](notebooks/01-eda_raw.ipynb) e [01-eda_interim.ipynb](notebooks/01-eda_interim.ipynb).
 Foram realizadas análises de volumetria, univariadas e bivariadas, além da investigação de possíveis casos de data leakage.
 Esta etapa orientou a construção da base processada.
 
-## 2. Geração da base processada
+## Geração da base processada
 -----------------------------
 Transforma a base original em uma versão consolidada, pronta para a modelagem.
 
@@ -33,7 +41,7 @@ Transforma a base original em uma versão consolidada, pronta para a modelagem.
 
 O arquivo resultante será salvo na pasta data/processed.
 
-## 3. Geração da base interim
+## Geração da base interim
 --------------------------
 Criação de novas features com apoio das classes em src/utils/transformers.py.
 
@@ -43,7 +51,7 @@ Criação de novas features com apoio das classes em src/utils/transformers.py.
 
 O resultado será salvo em data/interim.
 
-## 4. Split das bases de treino e teste
+## Split das bases de treino e teste
 ------------------------------------
 Separação dos conjuntos de treino e teste de forma estratificada, garantindo representatividade da variável alvo.
 
@@ -53,7 +61,7 @@ Separação dos conjuntos de treino e teste de forma estratificada, garantindo r
 
 Os conjuntos serão salvos em data/train_test.
 
-## 5. Feature Selection
+## Feature Selection
 --------------------
 Técnica Boruta, baseada em florestas aleatórias, utilizada para selecionar as variáveis mais relevantes.
 
@@ -63,7 +71,7 @@ Técnica Boruta, baseada em florestas aleatórias, utilizada para selecionar as 
 
 Resultado salvo em ([features_selected.yaml](src/features/selected/features_selected.yaml))
 
-## 6. Geração dos Encoders
+## Geração dos Encoders
 -----------------------
 Geração dos encoders e bases codificadas, incluindo preenchimento de nulos, padronização de strings e tratamento de variáveis categóricas.
 
@@ -71,12 +79,12 @@ Geração dos encoders e bases codificadas, incluindo preenchimento de nulos, pa
     python src/features/create_encoders.py
 ```
 
-## 7. Model selection
+## Model selection
 ------------------
 Modelos avaliados: Decision Tree, Random Forest, GBT, AdaBoost, XGBoost e LightGBM.
 Validação feita com cross-validation estratificada. 
 
-## 8. Tuning de hiperparâmetros
+## Tuning de hiperparâmetros
 ----------------------------
 Modelo com melhor desempenho ajustado com Optuna, utilizando otimização bayesiana.
 
@@ -84,12 +92,12 @@ Modelo com melhor desempenho ajustado com Optuna, utilizando otimização bayesi
     python src/models/tuning.py
 ```
 
-## 9. Treinamento final do modelo
+## Treinamento final do modelo
 ------------------------------
 Treinamento final documentado em notebooks/05-Model.ipynb.
 O modelo será salvo em models/predictors.
 
-## 10. Geração dos artefatos para produção
+## Geração dos artefatos para produção
 ---------------------------------------
 Criação da pipeline final com todos os componentes necessários para execução em produção.
 O modelo recebe um JSON como entrada e retorna um score.

@@ -1,4 +1,4 @@
-Case Campanha de Marketing iFood
+Case Campanha de Conversão de Oferta iFood
 ==================================================
 
 Este projeto tem como objetivo avaliar a efetividade de campanhas de marketing direcionadas a clientes do iFood. 

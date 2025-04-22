@@ -19,7 +19,7 @@ Para garantir o bom funcionamento do ambiente de desenvolvimento, recomenda-se i
 
 ## 1. Análise exploratória de dados
 --------------------------------
-A análise exploratória está documentada em ([01-eda_raw.ipynb](notebooks/01-eda_raw.ipynb)).
+A análise exploratória está documentada em [01-eda_raw.ipynb](notebooks/01-eda_raw.ipynb) e [01-eda_interim.ipynb](notebooks/01-eda_interim.ipynb).
 Foram realizadas análises de volumetria, univariadas e bivariadas, além da investigação de possíveis casos de data leakage.
 Esta etapa orientou a construção da base processada.
 

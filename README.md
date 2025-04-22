@@ -1,4 +1,4 @@
-Case Campanha de Conversão de Oferta iFood
+Case Conversão de Oferta iFood
 ==================================================
 
 Este projeto tem como objetivo avaliar a efetividade de campanhas de marketing direcionadas a clientes do iFood. 
@@ -19,7 +19,7 @@ Para garantir o bom funcionamento do ambiente de desenvolvimento, recomenda-se i
 
 ## 1. Análise exploratória de dados
 --------------------------------
-A análise exploratória está documentada em notebooks/01-EDA.ipynb.
+A análise exploratória está documentada em ([01-eda_raw.ipynb](notebooks/01-eda_raw.ipynb)).
 Foram realizadas análises de volumetria, univariadas e bivariadas, além da investigação de possíveis casos de data leakage.
 Esta etapa orientou a construção da base processada.
 

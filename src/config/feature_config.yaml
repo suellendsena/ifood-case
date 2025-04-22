@@ -1,0 +1,74 @@
+#####################################################################################
+################################### FEATURES ########################################
+#####################################################################################
+
+account_id:
+  auxiliar: true
+
+time_since_test_start:
+  descritiva: true
+
+amount:
+  auxiliar: true
+
+max_discount:
+  auxiliar: true
+
+completed_offer_types:
+  auxiliar: true
+
+real_amount:
+  descritiva: true
+
+age:
+  descritiva: true
+
+credit_card_limit:
+  descritiva: true
+
+gender:
+  descritiva: true
+
+registered_on:
+  auxiliar: true
+
+reg_day:
+  descritiva: true
+
+reg_month:
+  descritiva: true
+
+reg_year:
+  descritiva: true
+
+#####################################################################################
+############################### FEATURE ENGENEERING #################################
+#####################################################################################
+
+real_amount_per_limit:
+  descritiva: true
+
+n_transactions_so_far:
+  descritiva: true
+
+amount_cumulative:
+  descritiva: true
+
+n_conversions_so_far:
+  descritiva: true
+
+pct_current_vs_total_session:
+  descritiva: true
+
+amount_pct_limit:
+  descritiva: true
+
+limit_factor_vs_tx:
+  descritiva: true
+
+#####################################################################################
+##################################### TARGET ########################################
+#####################################################################################
+
+target_converted:
+  target: true

@@ -1,0 +1,17 @@
+[build-system]
+
+requires = ["setuptools>=64.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ifood-case"
+version = "0.0.1"
+authors = [
+  { name = "Suellen Sena da Silva", email = "suellendsena@gmail.com" }
+]
+description = "Exemplo de projeto usando setuptools"
+
+
+[tool.setuptools]
+packages = { find = { where = ["src"] } }
+package-dir = {"" = "src"}

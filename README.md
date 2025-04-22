@@ -69,7 +69,7 @@ Técnica Boruta, baseada em florestas aleatórias, utilizada para selecionar as 
     python src/features/feature_selection.py
 ```
 
-Resultado salvo em ([features_selected.yaml](src/features/selected/features_selected.yaml))
+Resultado salvo em [features_selected.yaml](src/features/selected/features_selected.yaml)
 
 ## Geração dos Encoders
 -----------------------
@@ -81,8 +81,10 @@ Geração dos encoders e bases codificadas, incluindo preenchimento de nulos, pa
 
 ## Model selection
 ------------------
-Modelos avaliados: Decision Tree, Random Forest, GBT, AdaBoost, XGBoost e LightGBM.
-Validação feita com cross-validation estratificada. 
+Modelos avaliados: Decision Tree, Random Forest e Gradient Boost ([05-model_selection.ipynb](notebooks/05-model_selection.ipynb)).
+Validação feita com cross-validation estratificada por cliente e técnicas de undersampling manual.
+
+
 
 ## Tuning de hiperparâmetros
 ----------------------------

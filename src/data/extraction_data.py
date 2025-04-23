@@ -6,8 +6,8 @@ import logging
 import argparse
 
 class RawDataLoader:
+
     def __init__(self, url, download_path="tmp/ds-data.tar.gz", extract_path="tmp/ds-data", target_path="data/raw"):
-        # Initialize loader with download, extraction and output paths
         self.url = url
         self.download_path = download_path
         self.extract_path = extract_path
@@ -18,20 +18,20 @@ class RawDataLoader:
             logging.basicConfig(level=logging.INFO)
 
     def download_tarball(self):
-        # Download .tar.gz archive from URL
+
         self.logger.info("Downloading the .tar.gz archive...")
         urllib.request.urlretrieve(self.url, self.download_path)
         self.logger.info("Download completed.")
 
     def extract_tarball(self):
-        # Extract contents of the .tar.gz archive
+
         self.logger.info("Extracting contents of the .tar.gz archive...")
         with tarfile.open(self.download_path, "r:gz") as tar:
             tar.extractall(path=self.extract_path)
         self.logger.info("Extraction completed.")
 
     def list_json_files(self):
-        # List all .json files found in the extracted content
+
         self.logger.info("Listing all .json files found in the extracted content:")
         json_files = []
         for root, _, files in os.walk(self.extract_path):
@@ -43,7 +43,7 @@ class RawDataLoader:
         return json_files
 
     def organize_files(self):
-        # Copy only the expected .json files to the raw data folder
+
         self.logger.info("Organizing extracted files...")
         copied_files = set()
         all_json_files = self.list_json_files()
@@ -57,7 +57,7 @@ class RawDataLoader:
                     copied_files.add(file)
                     self.logger.info(f"Copied JSON file: {file}")
 
-        # Warn if any expected files were not found
+
         missing = self.expected_files - copied_files
         if missing:
             self.logger.warning(f"Expected files not found: {missing}")
@@ -65,7 +65,7 @@ class RawDataLoader:
             self.logger.info("All expected files were successfully organized.")
 
 def main():
-    # CLI entry point to execute the full extraction and organization process
+
     parser = argparse.ArgumentParser(description="Download, extract, and organize raw data files.")
     parser.add_argument("--url", required=True, help="URL of the .tar.gz archive to download")
     parser.add_argument("--download_path", default="tmp/ds-data.tar.gz", help="Path to save the downloaded .tar.gz archive")
@@ -73,12 +73,10 @@ def main():
     parser.add_argument("--target_path", default="data/raw", help="Directory to store the organized JSON files")
     args = parser.parse_args()
 
-    # Ensure output folders exist
     os.makedirs(os.path.dirname(args.download_path), exist_ok=True)
     os.makedirs(args.extract_path, exist_ok=True)
     os.makedirs(args.target_path, exist_ok=True)
 
-    # Run all steps using RawDataLoader
     loader = RawDataLoader(
         url=args.url,
         download_path=args.download_path,

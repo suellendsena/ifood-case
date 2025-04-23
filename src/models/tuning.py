@@ -12,54 +12,7 @@ from pyspark.ml.classification import GBTClassifier
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
 
 from utils.spark_session import get_spark_session
-from utils.training_utils import find_specific_variables
-
-warnings.filterwarnings("ignore")
-
-
-def evaluate_gbt_model(hyperparams, df_with_folds, feature_cols, label_col="label", num_folds=5):
-    evaluator = BinaryClassificationEvaluator(labelCol=label_col, rawPredictionCol="rawPrediction", metricName="areaUnderROC")
-    auc_scores = []
-
-    for fold in range(num_folds):
-        train_fold = df_with_folds.filter(col("fold") != fold)
-        valid_fold = df_with_folds.filter(col("fold") == fold)
-
-        assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
-        train_vec = assembler.transform(train_fold).select("features", col(label_col))
-        valid_vec = assembler.transform(valid_fold).select("features", col(label_col))
-
-        model = GBTClassifier(
-            featuresCol="features",
-            labelCol=label_col,
-            maxDepth=hyperparams["maxDepth"],
-            maxIter=hyperparams["maxIter"],
-            stepSize=hyperparams["stepSize"],
-            seed=96
-        ).fit(train_vec)
-
-        preds = model.transform(valid_vec)
-        auc = evaluator.evaluate(preds)
-        auc_scores.append(auc)
-
-    return sum(auc_scores) / len(auc_scores)
-
-
-def objective(trial, df_with_folds, feature_cols, label_col, num_folds):
-    try:
-        params = {
-            "maxDepth": trial.suggest_int("maxDepth", 3, 8),
-            "maxIter": trial.suggest_int("maxIter", 10, 50),
-            "stepSize": trial.suggest_float("stepSize", 0.01, 0.3),
-        }
-        trial.set_user_attr("params", params)
-
-        auc = evaluate_gbt_model(params, df_with_folds, feature_cols, label_col, num_folds)
-        return auc
-
-    except Exception as e:
-        trial.set_user_attr("error", str(e))
-        return 0.0
+from utils.training_utils import find_specific_variables, evaluate_gbt_model, objective
 
 
 @click.command()
@@ -89,7 +42,6 @@ def main(configfile, dataset_name):
 
     logger.info(f"Features used in tuning: {feature_cols}")
 
-    # Assign folds based on account_id
     num_folds = 5
     account_folds = (
         df.select("account_id")

@@ -22,7 +22,7 @@ Para garantir o bom funcionamento do ambiente de desenvolvimento, recomenda-se i
 A criação da camada raw é feita a partir da extração dos dados que serão utilizados na análise. 
 
 ```bash
-    python src/data/extraction_data.py
+    python src/data/extraction_data.py --url "https://data-architect-test-source.s3.sa-east-1.amazonaws.com/ds-technical-evaluation-data.tar.gz"
 ```
 
 ## Análise exploratória de dados
@@ -96,8 +96,8 @@ Modelo com melhor desempenho ajustado com Optuna, utilizando otimização bayesi
 
 ## Treinamento final do modelo
 ------------------------------
-Treinamento final documentado em notebooks/05-Model.ipynb.
-O modelo será salvo em models/predictors.
+Treinamento final documentado em [notebooks/06-final_model.ipynb](notebooks/06-final_model.ipynb.)
+
 
 ## Geração dos artefatos para produção
 ---------------------------------------

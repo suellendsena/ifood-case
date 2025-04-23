@@ -1,13 +1,12 @@
+# Databricks notebook source
 import os
 import shutil
 import urllib.request
 import tarfile
 import logging
-import argparse
 
 class RawDataLoader:
-
-    def __init__(self, url, download_path="tmp/ds-data.tar.gz", extract_path="tmp/ds-data", target_path="data/raw"):
+    def __init__(self, url, download_path="/tmp/ds-data.tar.gz", extract_path="/tmp/ds-data", target_path="dbfs:/FileStore/raw"):
         self.url = url
         self.download_path = download_path
         self.extract_path = extract_path
@@ -18,20 +17,17 @@ class RawDataLoader:
             logging.basicConfig(level=logging.INFO)
 
     def download_tarball(self):
-
         self.logger.info("Downloading the .tar.gz archive...")
         urllib.request.urlretrieve(self.url, self.download_path)
         self.logger.info("Download completed.")
 
     def extract_tarball(self):
-
         self.logger.info("Extracting contents of the .tar.gz archive...")
         with tarfile.open(self.download_path, "r:gz") as tar:
             tar.extractall(path=self.extract_path)
         self.logger.info("Extraction completed.")
 
     def list_json_files(self):
-
         self.logger.info("Listing all .json files found in the extracted content:")
         json_files = []
         for root, _, files in os.walk(self.extract_path):
@@ -43,50 +39,24 @@ class RawDataLoader:
         return json_files
 
     def organize_files(self):
-
         self.logger.info("Organizing extracted files...")
         copied_files = set()
-        all_json_files = self.list_json_files()
+        os.makedirs("/tmp/staging", exist_ok=True)
 
         for root, _, files in os.walk(self.extract_path):
             for file in files:
                 if file in self.expected_files:
                     src = os.path.join(root, file)
-                    dst_json = os.path.join(self.target_path, file)
-                    shutil.copy(src, dst_json)
+                    tmp_dst = os.path.join("/tmp/staging", file)
+                    shutil.copy(src, tmp_dst)
+
+                    # Ensure it's visible to Spark
+                    dbutils.fs.cp(f"file:{tmp_dst}", f"{self.target_path}/{file}")
                     copied_files.add(file)
                     self.logger.info(f"Copied JSON file: {file}")
-
 
         missing = self.expected_files - copied_files
         if missing:
             self.logger.warning(f"Expected files not found: {missing}")
         else:
             self.logger.info("All expected files were successfully organized.")
-
-def main():
-
-    parser = argparse.ArgumentParser(description="Download, extract, and organize raw data files.")
-    parser.add_argument("--url", required=True, help="URL of the .tar.gz archive to download")
-    parser.add_argument("--download_path", default="tmp/ds-data.tar.gz", help="Path to save the downloaded .tar.gz archive")
-    parser.add_argument("--extract_path", default="tmp/ds-data", help="Directory to extract the contents of the archive")
-    parser.add_argument("--target_path", default="data/raw", help="Directory to store the organized JSON files")
-    args = parser.parse_args()
-
-    os.makedirs(os.path.dirname(args.download_path), exist_ok=True)
-    os.makedirs(args.extract_path, exist_ok=True)
-    os.makedirs(args.target_path, exist_ok=True)
-
-    loader = RawDataLoader(
-        url=args.url,
-        download_path=args.download_path,
-        extract_path=args.extract_path,
-        target_path=args.target_path
-    )
-
-    loader.download_tarball()
-    loader.extract_tarball()
-    loader.organize_files()
-
-if __name__ == "__main__":
-    main()

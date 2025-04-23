@@ -1,75 +1,102 @@
+# Databricks notebook source
 import os
-import yaml
+import json
 import logging
-import click
 
-from pyspark.sql.functions import col
+from pyspark.sql.functions import col, when
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import StringIndexer, VectorAssembler
 
-from utils.spark_session import get_spark_session
-from utils.training_utils import find_specific_variables
 
-@click.command()
-@click.option('--configfile', default='feature_config.yaml', help='Feature description file', type=str)
-@click.option('--dataset_name', default='train.parquet', help='Training dataset name', type=str)
-def main(configfile, dataset_name):
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    logger = logging.getLogger(__name__)
-    logger.info('Starting encoder creation process (PySpark version)')
+class SparkEncoderBuilder:
+    def __init__(self, dataset_path: str):
+        self.dataset_path = dataset_path
+        self.encoder_path = "/dbfs/FileStore/models/encoders/spark_encoder_pipeline"
+        self.output_path = "/FileStore/train_test/train_encoded.parquet"
+        self.selected_features_path = "/dbfs/FileStore/features/features_selected.json"
 
-    spark = get_spark_session("EncoderBuilder")
+        log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        logging.basicConfig(level=logging.INFO, format=log_fmt)
+        self.logger = logging.getLogger(self.__class__.__name__)
 
-    df = spark.read.parquet(os.path.join('data', 'train_test', dataset_name))
-    logger.info(f'Dataset loaded. Shape: ({df.count()}, {len(df.columns)})')
+    def _load_feature_config_from_table(self, spark):
+        self.logger.info("Loading feature config from Delta table 'feature_config'")
+        df_config = spark.table("feature_config")
+        config = {}
+        for col_name in df_config.schema.names:
+            attrs = df_config.select(col_name).first()[0]
+            if attrs:
+                config[col_name] = attrs.asDict()
+        return config
 
-    features = yaml.safe_load(open(os.path.join('src', 'config', configfile), 'r'))
-    target_col = find_specific_variables(features, 'target', specific_value=True)
-    target_col = target_col[0] if isinstance(target_col, list) else target_col
+    def _find_specific_variables(self, config, key, specific_value=True):
+        return [
+            col_name for col_name, attr in config.items()
+            if key in attr and attr[key] == specific_value
+        ]
 
-    try:
-        selected_features_yaml = yaml.safe_load(open(os.path.join('src', 'features', 'selected', 'features_selected.yaml')))
-        selected_features = selected_features_yaml.get("support_random_forest") or selected_features_yaml.get("support_boruta")
-    except Exception as e:
-        logger.error('Could not read feature selection output file.')
-        raise e
+    def _load_selected_features(self):
+        self.logger.info(f"Loading selected features from {self.selected_features_path}")
+        with open(self.selected_features_path, "r") as f:
+            selected = json.load(f)
+        return selected.get("support_random_forest", [])
 
-    hard_remove = find_specific_variables(features, 'hard_remove', specific_value=True)
-    selected_features = list(set(selected_features) - set(hard_remove))
+    def run(self, spark):
+        self.logger.info("Starting encoder creation process")
 
-    logger.info(f'Selected features for encoding: {selected_features}')
-    string_cols = [f.name for f in df.schema.fields if f.name in selected_features and f.dataType.simpleString() == 'string']
-    logger.info(f'String columns identified: {string_cols}')
+        df = spark.read.parquet(self.dataset_path)
+        self.logger.info(f"Dataset shape: ({df.count()}, {len(df.columns)})")
 
-    indexers = [
-        StringIndexer(inputCol=col, outputCol=f"{col}_idx", handleInvalid="keep")
-        for col in string_cols
-    ]
+        features = self._load_feature_config_from_table(spark)
+        selected_features = self._load_selected_features()
 
-    final_features = [
-        f"{col}_idx" if col in string_cols else col
-        for col in selected_features
-        if col != target_col
-    ]
+        target_col = self._find_specific_variables(features, "target", specific_value=True)
+        target_col = target_col[0] if isinstance(target_col, list) else target_col
+        self.logger.info(f"Target column: {target_col}")
 
-    assembler = VectorAssembler(inputCols=final_features, outputCol="features")
+        hard_remove = self._find_specific_variables(features, "hard_remove", specific_value=True)
+        selected = list(set(selected_features) - set(hard_remove))
+        self.logger.info(f"Features after removing hard_remove: {selected}")
 
-    pipeline = Pipeline(stages=indexers + [assembler])
-    pipeline_model = pipeline.fit(df)
-    df_transformed = pipeline_model.transform(df)
+        fillna_values = {
+            "gender": "unknown",
+            "credit_card_limit": -1.0,
+            "age": -1
+        }
+        self.logger.info(f"Applying fillna: {fillna_values}")
+        for col_name, val in fillna_values.items():
+            if col_name in df.columns:
+                df = df.withColumn(col_name, when(col(col_name).isNull(), val).otherwise(col(col_name)))
 
-    logger.info('Transformation completed. Saving outputs...')
+        string_cols = [f.name for f in df.schema.fields if f.name in selected and f.dataType.simpleString() == "string"]
+        self.logger.info(f"String columns to index: {string_cols}")
 
-    df_transformed.select("features", target_col).write.mode("overwrite").parquet(
-        os.path.join("data", "train_test", "train_encoded.parquet")
-    )
+        indexers = [
+            StringIndexer(inputCol=col, outputCol=f"{col}_idx", handleInvalid="keep")
+            for col in string_cols
+        ]
 
-    encoder_path = os.path.join("models", "encoders", "spark_encoder_pipeline")
-    pipeline_model.write().overwrite().save(encoder_path)
-    logger.info(f'Pipeline model saved to: {encoder_path}')
+        final_features = [
+            f"{col}_idx" if col in string_cols else col
+            for col in selected
+            if col != target_col and col != "account_id"
+        ]
 
-    logger.info('Success! Encoded data and encoder saved.')
+        assembler = VectorAssembler(inputCols=final_features, outputCol="features")
+        pipeline = Pipeline(stages=indexers + [assembler])
+        pipeline_model = pipeline.fit(df)
+        df_transformed = pipeline_model.transform(df)
 
+        cols_to_save = ["features", target_col]
+        if "account_id" in df.columns:
+            cols_to_save.append("account_id")
 
-if __name__ == '__main__':
-    main()
+        df_transformed.select(*cols_to_save).write.mode("overwrite").parquet(self.output_path)
+
+        pipeline_model.write().overwrite().save(self.encoder_path)
+
+        self.logger.info(f"Encoded dataset saved to: {self.output_path}")
+        self.logger.info(f"Encoder pipeline saved to: {self.encoder_path}")
+        self.logger.info("Finished encoder process.")
+
+        return df_transformed

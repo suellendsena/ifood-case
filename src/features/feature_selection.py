@@ -1,91 +1,100 @@
+# Databricks notebook source
 import os
-import yaml
+import json
 import logging
-import click
-import warnings
-
 from pyspark.sql.functions import col
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.classification import RandomForestClassifier
 
-from utils.spark_session import get_spark_session
-from utils.training_utils import find_specific_variables
 
-warnings.filterwarnings("ignore")
+class RandomForestFeatureSelector:
+    def __init__(self, dataset_path: str):
+        self.dataset_path = dataset_path
+        self.output_path = "/dbfs/FileStore/features/features_selected.json"
 
+        log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        logging.basicConfig(level=logging.INFO, format=log_fmt)
+        self.logger = logging.getLogger(self.__class__.__name__)
 
-@click.command()
-@click.option('--configfile', default='feature_config.yaml', help='YAML file describing the features', type=str)
-@click.option('--dataset_name', default='train.parquet', help='Training dataset name', type=str)
-def main(configfile, dataset_name):
+    def _load_feature_config_from_table(self, spark):
+        self.logger.info("Loading feature configuration from Delta table 'feature_config'")
+        df_config = spark.table("feature_config")
+        feature_config = {}
 
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    logger = logging.getLogger(__name__)
-    logger.info("Starting PySpark RandomForest Feature Selection")
+        for field in df_config.schema.fields:
+            feature_name = field.name
+            metadata = df_config.select(f"{feature_name}.*").first().asDict()
+            feature_config[feature_name] = metadata
 
-    spark = get_spark_session("RandomForestFeatureSelection")
+        return feature_config
 
-    feature_config_path = os.path.join('src', 'config', configfile)
-    feature_config = yaml.safe_load(open(feature_config_path, 'r'))
+    def _find_specific_variables(self, config, key, specific_value=True):
+        return [
+            col_name for col_name, attr in config.items()
+            if key in attr and attr[key] == specific_value
+        ]
 
-    dataset_path = os.path.join('data', 'train_test', dataset_name)
-    df = spark.read.parquet(dataset_path)
-    logger.info(f"Training dataset shape: ({df.count()}, {len(df.columns)})")
+    def run(self, spark):
+        self.logger.info("Starting PySpark RandomForest Feature Selection")
 
-    aux_vars = find_specific_variables(feature_config, 'auxiliar', specific_value=True)
-    hard_remove = find_specific_variables(feature_config, 'hard_remove', specific_value=True)
-    drop_cols = list(set(aux_vars + hard_remove) & set(df.columns))
-    df = df.drop(*drop_cols)
-    logger.info(f"Removed {len(drop_cols)} auxiliary/hard-remove features")
+        feature_config = self._load_feature_config_from_table(spark)
 
-    target = find_specific_variables(feature_config, 'target', specific_value=True)
-    target = target[0] if isinstance(target, list) else target
-    logger.info(f"Target column: {target}")
+        self.logger.info(f"Reading dataset from: {self.dataset_path}")
+        df = spark.read.parquet(self.dataset_path)
+        self.logger.info(f"Dataset shape: ({df.count()}, {len(df.columns)})")
 
-    feature_cols = [
-        f.name for f in df.schema.fields
-        if f.name != target and f.name != 'account_id' and f.dataType.simpleString() in ['int', 'double']
-    ]
-    logger.info(f"{len(feature_cols)} numeric features to evaluate (excluding 'account_id')")
+        aux_vars = self._find_specific_variables(feature_config, "auxiliar", True)
+        hard_remove = self._find_specific_variables(feature_config, "hard_remove", True)
+        drop_cols = list(set(aux_vars + hard_remove) & set(df.columns))
+        df = df.drop(*drop_cols)
+        self.logger.info(f"Removed {len(drop_cols)} auxiliary/hard-remove features")
 
-    assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
-    df_ml = assembler.transform(df.select(*(feature_cols + [target]))).select("features", col(target).alias("label"))
+        target = self._find_specific_variables(feature_config, "target", True)
+        target = target[0] if isinstance(target, list) and target else None
+        if not target:
+            raise ValueError("No target column identified in feature configuration.")
+        self.logger.info(f"Target column: {target}")
 
-    rf = RandomForestClassifier(
-        labelCol="label",
-        featuresCol="features",
-        numTrees=100,
-        maxDepth=4,
-        minInstancesPerNode=50,
-        seed=96
-    )
-    model = rf.fit(df_ml)
+        feature_cols = [
+            f.name for f in df.schema.fields
+            if f.name != target and f.name != "account_id" and f.dataType.simpleString() in ["int", "double"]
+        ]
+        self.logger.info(f"{len(feature_cols)} numeric features to evaluate")
 
-    importances = model.featureImportances.toArray()
-    full_ranking = list(zip(feature_cols, importances))
-    full_ranking.sort(key=lambda x: x[1], reverse=True)
+        assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
+        df_ml = assembler.transform(df.select(*(feature_cols + [target]))).select("features", col(target).alias("label"))
 
-    importance_threshold = 0.01
-    selected_features = [col for col, imp in full_ranking if imp >= importance_threshold]
-    rejected_features = [col for col, imp in full_ranking if imp < importance_threshold]
+        rf = RandomForestClassifier(
+            labelCol="label",
+            featuresCol="features",
+            numTrees=100,
+            maxDepth=4,
+            minInstancesPerNode=50,
+            seed=96
+        )
+        model = rf.fit(df_ml)
 
-    logger.info(f"{len(selected_features)} features selected (importance >= {importance_threshold}).")
-    logger.info(f"{len(rejected_features)} features rejected (importance < {importance_threshold}).")
+        importances = model.featureImportances.toArray()
+        full_ranking = list(zip(feature_cols, importances))
+        full_ranking.sort(key=lambda x: x[1], reverse=True)
 
-    result = {
-        "support_random_forest": selected_features,
-        "rejected_random_forest": rejected_features,
-        "full_importance_ranking": [[str(f), float(round(i, 6))] for f, i in full_ranking]
-    }
+        importance_threshold = 0.01
+        selected_features = [col for col, imp in full_ranking if imp >= importance_threshold]
+        rejected_features = [col for col, imp in full_ranking if imp < importance_threshold]
 
-    output_yaml = os.path.join("src", "features", "selected", "features_selected.yaml")
-    os.makedirs(os.path.dirname(output_yaml), exist_ok=True)
+        self.logger.info(f"{len(selected_features)} features selected (importance >= {importance_threshold})")
+        self.logger.info(f"{len(rejected_features)} features rejected (importance < {importance_threshold})")
 
-    with open(output_yaml, "w") as f:
-        yaml.dump(result, f, allow_unicode=True)
+        result = {
+            "support_random_forest": selected_features,
+            "rejected_random_forest": rejected_features,
+            "full_importance_ranking": [[str(f), float(round(i, 6))] for f, i in full_ranking]
+        }
 
-    logger.info(f"Feature selection result saved to: {output_yaml}")
+        os.makedirs(os.path.dirname(self.output_path), exist_ok=True)
 
+        with open(self.output_path, "w") as f:
+            json.dump(result, f, indent=2)
+        self.logger.info(f"Feature selection result saved to: {self.output_path}")
 
-if __name__ == "__main__":
-    main()
+        return result

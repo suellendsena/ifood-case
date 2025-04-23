@@ -1,3 +1,5 @@
+# Databricks notebook source
+import logging
 from pyspark.sql.functions import (
     col, when, lit,
     count, sum as spark_sum, coalesce
@@ -6,30 +8,22 @@ from pyspark.sql.window import Window
 from pyspark.ml import Transformer
 from pyspark.ml.util import DefaultParamsReadable, DefaultParamsWritable
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 class BuildFeatures(Transformer, DefaultParamsReadable, DefaultParamsWritable):
     """
-    Transformer that creates session-based features using historical transactions.
-
-    Inputs:
-        DataFrame with columns: 'account_id', 'time_since_test_start',
-        'real_amount', 'credit_card_limit', 'target_converted'.
-
-    Outputs:
-        DataFrame with additional columns:
-            - real_amount_per_limit
-            - n_transactions_so_far
-            - amount_cumulative
-            - n_conversions_so_far
-            - pct_current_vs_total_session
-            - amount_pct_limit
-            - limit_factor_vs_tx
+    PySpark transformer that adds session-based features.
     """
 
     def __init__(self):
         super().__init__()
 
     def _transform(self, X):
+        logger.info("Starting feature engineering...")
+
         session_window = Window.partitionBy("account_id") \
             .orderBy("time_since_test_start") \
             .rowsBetween(Window.unboundedPreceding, -1)
@@ -45,18 +39,13 @@ class BuildFeatures(Transformer, DefaultParamsReadable, DefaultParamsWritable):
             .withColumn("limit_factor_vs_tx", col("credit_card_limit") / when(col("real_amount") != 0, col("real_amount")).otherwise(1))
         )
 
+        logger.info("Feature engineering completed successfully.")
         return X
 
 
 class SparkSelector(Transformer, DefaultParamsReadable, DefaultParamsWritable):
     """
-    Transformer that selects a subset of columns from the DataFrame.
-
-    Inputs:
-        DataFrame with feature and target columns.
-
-    Outputs:
-        DataFrame with only the selected feature columns and the target column.
+    Transformer that selects a subset of columns from a DataFrame.
     """
     def __init__(self, features: list, target: str):
         super().__init__()
@@ -69,13 +58,7 @@ class SparkSelector(Transformer, DefaultParamsReadable, DefaultParamsWritable):
 
 class FillMissingTransformer(Transformer, DefaultParamsReadable, DefaultParamsWritable):
     """
-    Transformer that fills missing values using a dictionary of defaults.
-
-    Inputs:
-        DataFrame with potential null values in specified columns.
-
-    Outputs:
-        DataFrame with nulls replaced by specified default values.
+    Transformer that fills missing values with predefined values (dict-based).
     """
     def __init__(self, fill_dict: dict):
         super().__init__()
@@ -89,3 +72,6 @@ class FillMissingTransformer(Transformer, DefaultParamsReadable, DefaultParamsWr
                     when(col(col_name).isNull(), val).otherwise(col(col_name))
                 )
         return df
+
+# COMMAND ----------
+

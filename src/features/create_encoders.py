@@ -37,9 +37,6 @@ def main(configfile, dataset_name):
     hard_remove = find_specific_variables(features, 'hard_remove', specific_value=True)
     selected_features = list(set(selected_features) - set(hard_remove))
 
-    if 'index' in df.columns:
-        selected_features.append('index')
-
     logger.info(f'Selected features for encoding: {selected_features}')
     string_cols = [f.name for f in df.schema.fields if f.name in selected_features and f.dataType.simpleString() == 'string']
     logger.info(f'String columns identified: {string_cols}')
@@ -63,7 +60,7 @@ def main(configfile, dataset_name):
 
     logger.info('Transformation completed. Saving outputs...')
 
-    df_transformed.select("features", target_col, "index").write.mode("overwrite").parquet(
+    df_transformed.select("features", target_col).write.mode("overwrite").parquet(
         os.path.join("data", "train_test", "train_encoded.parquet")
     )
 

@@ -124,8 +124,6 @@ def main(configfile, dataset_name):
     logger.info('Loading selected features...')
     selected_yaml = yaml.safe_load(open(os.path.join('src', 'features', 'selected', 'features_selected.yaml'), 'r'))
     feature_cols = selected_yaml.get("support_random_forest") or selected_yaml.get("support_boruta") or []
-    if "index" in feature_cols:
-        feature_cols.remove("index")
 
     logger.info(f"Features used in tuning: {feature_cols}")
 

@@ -140,7 +140,7 @@ def main(configfile, dataset_name):
 
     logger.info('Starting Optuna study...')
     study = optuna.create_study(direction='maximize', study_name='GBTClassifier_GroupCV', sampler=optuna.samplers.TPESampler(seed=42))
-    study.optimize(lambda trial: objective(trial, df_with_folds, feature_cols, label_col="label", num_folds=num_folds), n_trials=10, n_jobs=1, show_progress_bar=True)
+    study.optimize(lambda trial: objective(trial, df_with_folds, feature_cols, label_col="label", num_folds=num_folds), n_trials=30, n_jobs=1, show_progress_bar=True)
 
     logger.info('Tuning complete.')
     logger.info(f'Best trial: {study.best_trial.params}')

@@ -3,7 +3,7 @@ import yaml
 import logging
 import click
 
-from pyspark.sql.functions import col, when
+from pyspark.sql.functions import col
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import StringIndexer, VectorAssembler
 
@@ -14,7 +14,6 @@ from utils.training_utils import find_specific_variables
 @click.option('--configfile', default='feature_config.yaml', help='Feature description file', type=str)
 @click.option('--dataset_name', default='train.parquet', help='Training dataset name', type=str)
 def main(configfile, dataset_name):
-
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(__name__)
     logger.info('Starting encoder creation process (PySpark version)')
@@ -38,28 +37,10 @@ def main(configfile, dataset_name):
     hard_remove = find_specific_variables(features, 'hard_remove', specific_value=True)
     selected_features = list(set(selected_features) - set(hard_remove))
 
-    use_for_cv = 'account_id' in df.columns
+    if 'index' in df.columns:
+        selected_features.append('index')
 
     logger.info(f'Selected features for encoding: {selected_features}')
-
-    fillna_values = {
-        "gender": "unknown",
-        "credit_card_limit": -1.0,
-        "age": -1
-    }
-
-    logger.info(f'Applying consistent fillna values: {fillna_values}')
-    for col_name, fill_val in fillna_values.items():
-        if col_name in df.columns:
-            df = df.withColumn(
-                col_name,
-                when(col(col_name).isNull(), fill_val).otherwise(col(col_name))
-            )
-
-    os.makedirs('models/encoders', exist_ok=True)
-    with open('models/encoders/fillna_values.yaml', 'w') as f:
-        yaml.dump(fillna_values, f)
-
     string_cols = [f.name for f in df.schema.fields if f.name in selected_features and f.dataType.simpleString() == 'string']
     logger.info(f'String columns identified: {string_cols}')
 
@@ -71,7 +52,7 @@ def main(configfile, dataset_name):
     final_features = [
         f"{col}_idx" if col in string_cols else col
         for col in selected_features
-        if col != target_col and col != 'account_id'
+        if col != target_col
     ]
 
     assembler = VectorAssembler(inputCols=final_features, outputCol="features")
@@ -82,11 +63,7 @@ def main(configfile, dataset_name):
 
     logger.info('Transformation completed. Saving outputs...')
 
-    columns_to_save = ["features", target_col]
-    if 'account_id' in df.columns:
-        columns_to_save.append('account_id')
-
-    df_transformed.select(*columns_to_save).write.mode("overwrite").parquet(
+    df_transformed.select("features", target_col, "index").write.mode("overwrite").parquet(
         os.path.join("data", "train_test", "train_encoded.parquet")
     )
 
@@ -94,7 +71,7 @@ def main(configfile, dataset_name):
     pipeline_model.write().overwrite().save(encoder_path)
     logger.info(f'Pipeline model saved to: {encoder_path}')
 
-    logger.info('Success! Encoded data, encoder, and fillna values saved.')
+    logger.info('Success! Encoded data and encoder saved.')
 
 
 if __name__ == '__main__':

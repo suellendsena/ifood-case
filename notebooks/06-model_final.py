@@ -24,10 +24,9 @@ from pyspark.sql.functions import udf, col
 
 # COMMAND ----------
 
-# Read feature_config Delta table
+
 df_config = spark.table("feature_config")
 
-# Build feature configuration dictionary
 feature_config = {}
 
 for field in df_config.schema.fields:
@@ -38,10 +37,8 @@ for field in df_config.schema.fields:
 
 # COMMAND ----------
 
-# Paths
 features_selected_path = "/dbfs/FileStore/features/features_selected.json"
 
-# Load selected features from JSON
 with open(features_selected_path, "r") as f:
     selected_json = json.load(f)
     selected_features = selected_json["support_random_forest"]
@@ -73,7 +70,6 @@ if target_col != "label":
 
 params_path =  "/dbfs/FileStore/models/tuning_best_params_gbt.json"
 
-# Load hyperparameters
 with open(params_path, 'r') as f:
     best_params = json.load(f)
 

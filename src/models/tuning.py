@@ -12,7 +12,94 @@ from pyspark.ml.classification import GBTClassifier
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
 
 from utils.spark_session import get_spark_session
-from utils.training_utils import find_specific_variables, evaluate_gbt_model, objective
+from utils.training_utils import find_specific_variables
+
+def evaluate_gbt_model(hyperparams, df_with_folds, feature_cols, label_col="label", num_folds=5):
+    """
+    Perform K-fold cross-validation to evaluate a GBTClassifier model using AUC as the metric.
+
+    Parameters
+    ----------
+    hyperparams : dict
+        Dictionary containing GBT hyperparameters: 'maxDepth', 'maxIter', and 'stepSize'.
+    df_with_folds : pyspark.sql.DataFrame
+        Input DataFrame containing a column 'fold' indicating the fold assignment for cross-validation.
+    feature_cols : list
+        List of feature column names used for model training.
+    label_col : str, default="label"
+        Name of the label column.
+    num_folds : int, default=5
+        Number of folds to use for cross-validation.
+
+    Returns
+    -------
+    float
+        Average AUC score across all folds.
+    """
+    evaluator = BinaryClassificationEvaluator(labelCol=label_col, rawPredictionCol="rawPrediction", metricName="areaUnderROC")
+    auc_scores = []
+
+    for fold in range(num_folds):
+        train_fold = df_with_folds.filter(col("fold") != fold)
+        valid_fold = df_with_folds.filter(col("fold") == fold)
+
+        assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
+        train_vec = assembler.transform(train_fold).select("features", col(label_col))
+        valid_vec = assembler.transform(valid_fold).select("features", col(label_col))
+
+        model = GBTClassifier(
+            featuresCol="features",
+            labelCol=label_col,
+            maxDepth=hyperparams["maxDepth"],
+            maxIter=hyperparams["maxIter"],
+            stepSize=hyperparams["stepSize"],
+            seed=96
+        ).fit(train_vec)
+
+        preds = model.transform(valid_vec)
+        auc = evaluator.evaluate(preds)
+        auc_scores.append(auc)
+
+    return sum(auc_scores) / len(auc_scores)
+
+
+def objective(trial, df_with_folds, feature_cols, label_col, num_folds):
+    """
+    Objective function for Optuna hyperparameter tuning of a GBTClassifier using cross-validation.
+
+    Parameters
+    ----------
+    trial : optuna.trial.Trial
+        Trial object used by Optuna to suggest hyperparameters.
+    df_with_folds : pyspark.sql.DataFrame
+        DataFrame with pre-assigned folds (must contain a 'fold' column).
+    feature_cols : list
+        List of feature column names to be used in the model.
+    label_col : str
+        Name of the label column.
+    num_folds : int
+        Number of folds for cross-validation.
+
+    Returns
+    -------
+    float
+        The mean AUC score returned by cross-validation, used by Optuna to guide optimization.
+    """
+    try:
+        params = {
+            "maxDepth": trial.suggest_int("maxDepth", 3, 8),
+            "maxIter": trial.suggest_int("maxIter", 10, 50),
+            "stepSize": trial.suggest_float("stepSize", 0.01, 0.3),
+        }
+        trial.set_user_attr("params", params)
+
+        auc = evaluate_gbt_model(params, df_with_folds, feature_cols, label_col, num_folds)
+        return auc
+
+    except Exception as e:
+        trial.set_user_attr("error", str(e))
+        return 0.0
+
 
 
 @click.command()
@@ -53,7 +140,7 @@ def main(configfile, dataset_name):
 
     logger.info('Starting Optuna study...')
     study = optuna.create_study(direction='maximize', study_name='GBTClassifier_GroupCV', sampler=optuna.samplers.TPESampler(seed=42))
-    study.optimize(lambda trial: objective(trial, df_with_folds, feature_cols, label_col="label", num_folds=num_folds), n_trials=30, n_jobs=1, show_progress_bar=True)
+    study.optimize(lambda trial: objective(trial, df_with_folds, feature_cols, label_col="label", num_folds=num_folds), n_trials=10, n_jobs=1, show_progress_bar=True)
 
     logger.info('Tuning complete.')
     logger.info(f'Best trial: {study.best_trial.params}')
